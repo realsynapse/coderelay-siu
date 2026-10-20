@@ -105,7 +105,13 @@ function supabaseDb() {
       if (error) { if (error.code === "23505") throw Object.assign(new Error("taken"), { taken: true }); throw error; }
       return data;
     },
-    async nameTaken(name) { return chk(await c.from("users").select("id").ilike("name", name.replace(/[\\%_]/g, "\\$&")).limit(1)).length > 0; },
+    async nameTaken(name) {
+      // PostgREST treats "*" as a wildcard, so "No*" would match "Noitsnot". Match "*" as any one character, then confirm an exact (case-insensitive) match here.
+      const pat = name.replace(/[\\%_]/g, "\\$&").replace(/\*/g, "_");
+      const rows = chk(await c.from("users").select("name").ilike("name", pat).limit(50));
+      const k = name.toLowerCase();
+      return rows.some(r => String(r.name).toLowerCase() === k);
+    },
     async deleteRoom(id) {
       chk(await c.from("rooms").delete().eq("id", id));
       const h = await c.from("room_history").delete().eq("room_id", id);
@@ -153,6 +159,7 @@ if (!db) {
 // ---------- hardening: proxy, https, headers ----------
 app.disable("x-powered-by");
 if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY) || 1);
+else if (process.env.RENDER) app.set("trust proxy", 1);   // on Render every request comes through its proxy; without this all visitors share one rate-limit bucket
 app.use((req, res, next) => {
   if (process.env.FORCE_HTTPS === "1" && !req.secure) return res.redirect(308, "https://" + req.headers.host + req.originalUrl);
   next();

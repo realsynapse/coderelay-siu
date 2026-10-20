@@ -24,7 +24,7 @@
 
 <header class="reveal" style="--d:0">
   <div class="brand"><div class="logo"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M24 18 10 32l14 14"/><path d="M40 18l14 14-14 14"/></svg></div><div><h1>CodeRelay</h1><div class="sub">One editor. Your whole team.</div></div></div>
-  <div class="header-actions"><span id="userChip" class="user-chip hidden"></span><button id="rolesBtn" class="hidden"><span class="label">Manage roles</span></button><button id="termsBtn">Terms &amp; Conditions</button></div>
+  <div class="header-actions"><span id="userChip" class="user-chip hidden"></span><button id="rolesBtn" class="hidden"><span class="label">Manage roles</span></button><button id="phonkBtn"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span class="label">Play phonk</span></button><button id="termsBtn">Terms &amp; Conditions</button></div>
 </header>
 <main>
   <div class="intro reveal" style="--d:1"><div><h2>Code together, simply.</h2><p>Share one QR code and edit the same code live. The owner can lock editing while keeping code viewable and copyable. Your workspace is saved, so the link keeps working after the server restarts. Any language.</p></div><span id="roomPill" class="room-pill">New workspace</span></div>
@@ -86,6 +86,32 @@
 <dialog id="delDlg"><h2>Delete this workspace?</h2>
 <p>The workspace link stops working for everyone, and the saved code and history are permanently removed. A copy of the text stays in your own editor.</p>
 <div class="dlg-actions"><button id="delCancel"><span class="label">Cancel</span></button><button id="delConfirm" class="primary"><span class="label">Delete forever</span></button></div></dialog>
+
+<div id="phonkWin" class="phonk-win" role="dialog" aria-label="Play phonk" aria-hidden="true" inert>
+  <div id="phonkBar" class="pw-bar">
+    <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="pw-title">Play phonk</span>
+    <button id="phonkMin" class="pw-ico" type="button" aria-label="Minimize" aria-expanded="true"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <button id="phonkX" class="pw-ico" type="button" aria-label="Close (music keeps playing)"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 3.5l7 7m0-7l-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+  </div>
+  <div id="phonkFold" class="pw-fold"><div>
+    <ul id="phonkList" class="phonk-list"></ul>
+    <p id="phonkMsg" class="phonk-msg"></p>
+  </div></div>
+  <div class="pw-now">
+    <button id="phonkToggle" type="button" aria-label="Play or pause" disabled>
+      <svg class="ic-play" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8.2-5.2a.6.6 0 0 0 0-1L5.4 2.3a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg>
+      <svg class="ic-pause" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.5" width="3" height="11" rx="1" fill="currentColor"/><rect x="9.5" y="2.5" width="3" height="11" rx="1" fill="currentColor"/></svg>
+    </button>
+    <div class="pw-meta">
+      <div class="pw-line"><span id="phonkNowName" class="pw-name">Nothing playing</span><span id="phonkTime" class="pw-time">0:00</span></div>
+      <div id="phonkProg" class="pw-prog" role="slider" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="phonkFill"></i></div>
+    </div>
+    <button id="phonkStop" class="pw-ico" type="button" aria-label="Stop" disabled><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.6" fill="currentColor"/></svg></button>
+  </div>
+</div>
+<button id="phonkBubble" type="button" aria-label="Open phonk player"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></button>
+<audio id="phonkPlayer" preload="none"></audio>
 
 <dialog id="rolesDlg"><h2>Manage roles</h2>
 <p>Search by name or number, then choose Admin, Moderator or None. Roles are tags only for now.</p>

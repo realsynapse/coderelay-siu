@@ -267,6 +267,102 @@ if (window.ResizeObserver) new ResizeObserver(syncScroll).observe($("code"));
 /* ---------- terms dialog ---------- */
 const terms = $("terms");
 $("termsBtn").addEventListener("click", () => terms.showModal());
+/* ---------- play phonk: public for everyone; a floating player you can drag, minimize and close without stopping the music ---------- */
+const pw = $("phonkWin"), phonkList = $("phonkList"), phonkMsg = $("phonkMsg"), phonkPlayer = $("phonkPlayer"), phonkBubble = $("phonkBubble"), phonkBar = $("phonkBar");
+let phonkNames = null, phonkNow = null, pwOpen = false, pwPos = null, pwDrag = null;
+const phonkRows = new Map();
+const fmtT = t => (isFinite(t) && t > 0) ? Math.floor(t / 60) + ":" + String(Math.floor(t % 60)).padStart(2, "0") : "0:00";
+const phonkIsPlaying = () => phonkNow !== null && !phonkPlayer.paused && !phonkPlayer.ended;
+function phonkNote(t, bad) { phonkMsg.textContent = t || ""; phonkMsg.classList.toggle("bad", Boolean(bad)); }
+function phonkSync() {
+  const playing = phonkIsPlaying();
+  for (const [n, li] of phonkRows) { li.classList.toggle("active", n === phonkNow); li.classList.toggle("playing", n === phonkNow && playing); li.setAttribute("aria-pressed", String(n === phonkNow && playing)); }
+  $("phonkBtn").classList.toggle("playing", playing); pw.classList.toggle("playing", playing);
+  $("phonkBtn").querySelector(".label").textContent = playing ? "Now playing" : "Play phonk";
+  phonkBubble.classList.toggle("show", !pwOpen && phonkNow !== null); phonkBubble.classList.toggle("playing", playing);
+  $("phonkNowName").textContent = phonkNow === null ? "Nothing playing" : phonkNow;
+  $("phonkToggle").disabled = $("phonkStop").disabled = phonkNow === null;
+}
+function phonkProgress() {
+  const d = phonkPlayer.duration, t = phonkPlayer.currentTime, pct = d > 0 ? Math.min(100, t / d * 100) : 0;
+  $("phonkFill").style.width = pct + "%"; $("phonkProg").setAttribute("aria-valuenow", String(Math.round(pct)));
+  $("phonkTime").textContent = phonkNow === null ? "0:00" : fmtT(t) + (d > 0 ? " / " + fmtT(d) : "");
+}
+function phonkToggle() {
+  if (phonkNow === null) return;
+  if (phonkPlayer.paused) { if (phonkPlayer.ended) phonkPlayer.currentTime = 0; phonkPlayer.play().catch(() => {}); } else phonkPlayer.pause();
+}
+function phonkPlay(name) {
+  if (phonkNow === name) { phonkToggle(); return; }                      // same one: pause / resume
+  phonkNow = name; phonkNote(""); phonkPlayer.src = "/phonk/" + encodeURIComponent(name) + ".mp3";
+  phonkPlayer.play().catch(() => {}); phonkSync(); phonkProgress();
+  if ("mediaSession" in navigator && window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: name, artist: "CodeRelay" });
+}
+function phonkStop() { phonkPlayer.pause(); phonkPlayer.removeAttribute("src"); phonkPlayer.load(); phonkNow = null; phonkSync(); phonkProgress(); }
+for (const ev of ["play", "pause", "ended"]) phonkPlayer.addEventListener(ev, phonkSync);
+for (const ev of ["timeupdate", "loadedmetadata", "durationchange"]) phonkPlayer.addEventListener(ev, phonkProgress);
+phonkPlayer.addEventListener("error", () => { if (phonkNow === null) return; const n = phonkNow; phonkNow = null; phonkSync(); phonkProgress(); phonkNote("Couldn\u2019t play \u201c" + n + "\u201d. Check that " + n + ".mp3 is in the phonk folder.", true); });
+if ("mediaSession" in navigator) { try { navigator.mediaSession.setActionHandler("play", phonkToggle); navigator.mediaSession.setActionHandler("pause", phonkToggle); navigator.mediaSession.setActionHandler("stop", phonkStop); } catch {} }
+
+async function phonkLoad() {
+  if (phonkNames) return;
+  try {
+    const r = await fetch("/phonk/phonks.json"); if (!r.ok) throw 0;
+    const d = await r.json(); phonkNames = (Array.isArray(d) ? d : []).map(String).map(x => x.trim()).filter(Boolean).slice(0, 200);
+  } catch { phonkNames = null; phonkNote("Couldn\u2019t load the phonk list.", true); return; }
+  phonkList.textContent = ""; phonkRows.clear();
+  if (!phonkNames.length) { phonkNote("No phonks added yet."); return; }
+  phonkNames.forEach((n, i) => {
+    const li = document.createElement("li"); li.className = "phonk-row"; li.tabIndex = 0; li.setAttribute("role", "button"); li.style.setProperty("--i", i);
+    const eq = document.createElement("span"); eq.className = "eq"; eq.setAttribute("aria-hidden", "true"); eq.append(document.createElement("i"), document.createElement("i"), document.createElement("i"));
+    const t = document.createElement("span"); t.className = "pn"; t.textContent = n;
+    li.append(eq, t);
+    li.addEventListener("click", () => phonkPlay(n));
+    li.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); phonkPlay(n); } });
+    phonkRows.set(n, li); phonkList.append(li);
+  });
+  phonkSync();
+}
+
+/* window: open / close / minimize / drag. Closing only hides the window; the <audio> lives outside it, so the music keeps going. */
+function pwApply(x, y) {
+  const w = pw.offsetWidth, h = pw.offsetHeight;
+  x = Math.min(Math.max(8, x), Math.max(8, innerWidth - w - 8)); y = Math.min(Math.max(8, y), Math.max(8, innerHeight - h - 8));
+  pwPos = { x, y }; pw.classList.add("free"); pw.style.setProperty("--x", x + "px"); pw.style.setProperty("--y", y + "px");
+}
+function pwShow(open) {
+  pwOpen = open; pw.classList.toggle("show", open); pw.inert = !open; pw.setAttribute("aria-hidden", String(!open));
+  $("phonkBtn").setAttribute("aria-expanded", String(open)); phonkSync();
+  if (open) { phonkLoad(); if (pwPos) pwApply(pwPos.x, pwPos.y); }
+}
+function pwMin(min) { pw.classList.toggle("min", min); $("phonkFold").inert = min; $("phonkMin").setAttribute("aria-expanded", String(!min)); $("phonkMin").setAttribute("aria-label", min ? "Expand" : "Minimize"); }
+$("phonkBtn").addEventListener("click", () => pwShow(!pwOpen));
+phonkBubble.addEventListener("click", () => pwShow(true));
+$("phonkX").addEventListener("click", () => { pwShow(false); $("phonkBtn").focus({ preventScroll: true }); });
+$("phonkMin").addEventListener("click", () => pwMin(!pw.classList.contains("min")));
+$("phonkToggle").addEventListener("click", phonkToggle);
+$("phonkStop").addEventListener("click", phonkStop);
+pw.addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); pwShow(false); $("phonkBtn").focus({ preventScroll: true }); } });
+phonkBar.addEventListener("dblclick", e => { if (!e.target.closest("button")) pwMin(!pw.classList.contains("min")); });
+phonkBar.addEventListener("pointerdown", e => {
+  if (e.button !== 0 || e.target.closest("button")) return;
+  const r = pw.getBoundingClientRect(); pwApply(r.left, r.top);
+  pwDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top }; pw.classList.add("dragging"); phonkBar.setPointerCapture(e.pointerId);
+});
+phonkBar.addEventListener("pointermove", e => { if (pwDrag) pwApply(e.clientX - pwDrag.dx, e.clientY - pwDrag.dy); });
+for (const ev of ["pointerup", "pointercancel"]) phonkBar.addEventListener(ev, () => { pwDrag = null; pw.classList.remove("dragging"); });
+addEventListener("resize", () => { if (pwPos) pwApply(pwPos.x, pwPos.y); });
+if (window.ResizeObserver) new ResizeObserver(() => { if (pwPos && !pwDrag) pwApply(pwPos.x, pwPos.y); }).observe(pw);   // keeps it on screen when it grows or shrinks
+
+/* seek bar */
+const prog = $("phonkProg");
+function seekAt(e) { const r = prog.getBoundingClientRect(), d = phonkPlayer.duration; if (phonkNow !== null && d > 0) { phonkPlayer.currentTime = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * d; phonkProgress(); } }
+let seeking = false;
+prog.addEventListener("pointerdown", e => { seeking = true; prog.setPointerCapture(e.pointerId); seekAt(e); });
+prog.addEventListener("pointermove", e => { if (seeking) seekAt(e); });
+for (const ev of ["pointerup", "pointercancel"]) prog.addEventListener(ev, () => { seeking = false; });
+phonkSync(); phonkProgress();
+
 function closeTerms() {
   if (reduceMotion) return terms.close();
   terms.classList.add("closing");
@@ -411,8 +507,9 @@ $("nameInput").addEventListener("input", () => {            // tells you while y
   const seq = ++nameSeq;
   nameTimer = setTimeout(async () => {
     try {
-      const d = await (await fetch("/api/name-available?name=" + encodeURIComponent(name))).json();
+      const r = await fetch("/api/name-available?name=" + encodeURIComponent(name)), d = await r.json().catch(() => ({}));
       if (seq !== nameSeq) return;
+      if (!r.ok || typeof d.available !== "boolean") { nameOk = true; $("nameSave").disabled = false; nameMsg("Couldn't check this name right now. It will be checked when you continue.", ""); return; }   // never say "taken" unless the server said so
       nameOk = Boolean(d.available); $("nameSave").disabled = !nameOk;
       nameMsg(d.available ? "\u2713 \"" + name + "\" is available" : "That name is already taken. Please choose another.", d.available ? "ok" : "bad");
     } catch { nameOk = true; $("nameSave").disabled = false; nameMsg("", ""); }   // server decides on save
