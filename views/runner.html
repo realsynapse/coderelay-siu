@@ -52,17 +52,39 @@
     "onmessage=async function(ev){var AF=Object.getPrototypeOf(async function(){}).constructor;try{var r=await new AF(ev.data)();if(r!==undefined)post('log','← '+fmt(r));postMessage({done:true,ok:true});}catch(err){post('error',(err&&err.name?err.name+': ':'')+(err&&err.message?err.message:fmt(err)),lineOf(err));postMessage({done:true,ok:false});}};"
   ].join("");
   var PY_WORKER = COMMON + [
-    "importScripts('" + PY_BASE + "pyodide.js');var py=null;",
-    "onmessage=async function(ev){try{",
-    "if(!py){post('info','Loading the Python runtime (first run only, about 10 MB)…');py=await loadPyodide({indexURL:'" + PY_BASE + "'});}",
-    "py.setStdout({batched:function(s){post('log',s);}});py.setStderr({batched:function(s){post('error',s);}});",
-    "var ns=py.globals.get('dict')();try{await py.runPythonAsync(ev.data,{globals:ns});}finally{ns.destroy();}",
+    "importScripts('" + PY_BASE + "pyodide.js');var py=null,loading=null;",
+    "function load(){if(py)return Promise.resolve();return loading||(loading=loadPyodide({indexURL:'" + PY_BASE + "'}).then(function(p){py=p;py.setStdout({batched:function(s){post('log',s);}});py.setStderr({batched:function(s){post('error',s);}});}));}",
+    "onmessage=async function(ev){var d=ev.data||{};",
+    "if(d.t==='load'){try{await load();postMessage({ready:true});}catch(err){loading=null;postMessage({loadError:String(err&&err.message||err)});}return;}",
+    "try{await load();",
+    "var ns=py.globals.get('dict')();try{await py.runPythonAsync(String(d.code||''),{globals:ns});}finally{ns.destroy();}",
     "postMessage({done:true,ok:true});",
-    "}catch(err){var m=String(err&&err.message||err),all=m.match(/File \"<exec>\", line (\\d+)/g),ln;if(all){ln=Number(all[all.length-1].match(/(\\d+)$/)[1]);}",
-    "var tail=m.trim().split('\\n').slice(-1)[0];post('error',tail,ln);postMessage({done:true,ok:false});}};"
+    "}catch(err){var m=String(err&&err.message||err),all=m.match(/File \\\"<exec>\\\", line (\\\\d+)/g),ln;if(all){ln=Number(all[all.length-1].match(/(\\\\d+)$/)[1]);}",
+    "var tail=m.trim().split('\\\\n').slice(-1)[0];post('error',tail,ln);postMessage({done:true,ok:false});}};"
   ].join("");
 
   function blobWorker(src) { return new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" }))); }
+
+  /* Python: the runtime (~10 MB) downloads once, with no time limit, and is kept. The time limit only applies to the code itself. */
+  var pyState = "idle", pyWaiters = [];                    // idle | loading | ready
+  function pyFail(w, text) {
+    try { w.terminate(); } catch (e) {}
+    if (pyWorker === w) { pyWorker = null; pyState = "idle"; }
+    send({ type: "pystate", state: "error", text: "Couldn't download Python. Check your connection, then press Run to try again." });
+    pyWaiters.splice(0).forEach(function (f) { f(false); });
+  }
+  function ensurePy() {
+    if (pyWorker) return;
+    var w = pyWorker = blobWorker(PY_WORKER); pyState = "loading";
+    send({ type: "pystate", state: "loading" });
+    w.addEventListener("message", function (e) {
+      var d = e.data || {};
+      if (d.ready) { pyState = "ready"; send({ type: "pystate", state: "ready" }); pyWaiters.splice(0).forEach(function (f) { f(true); }); }
+      else if (d.loadError) pyFail(w, d.loadError);
+    });
+    w.addEventListener("error", function (e) { if (pyState === "loading") pyFail(w, e.message); });
+    w.postMessage({ t: "load" });
+  }
 
   var SQL_BASE = "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/";
   var TS_URL = "https://cdn.jsdelivr.net/npm/typescript@5.6.3/lib/typescript.js";
@@ -87,7 +109,7 @@
   function stopCurrent(reason) {
     if (!current) return;
     var c = current;
-    if (c.persistent && pyWorker) { try { pyWorker.terminate(); } catch (e) {} pyWorker = null; }
+    if (c.persistent && pyWorker && pyState === "ready") { try { pyWorker.terminate(); } catch (e) {} pyWorker = null; pyState = "idle"; }   // never kill it mid-download: it keeps downloading in the background
     finish(c.id, false, c.started, reason);
   }
 
@@ -130,13 +152,18 @@
       if (errs.length && !noLines) return fail("SyntaxError: " + errs[0].message, errs[0].line);
     }
     var worker;
-    if (lang === "py") { pyWorker = pyWorker || blobWorker(PY_WORKER); worker = pyWorker; current.persistent = true; }
+    if (lang === "py") { ensurePy(); worker = pyWorker; current.persistent = true; }
     else worker = blobWorker(lang === "sql" ? SQL_WORKER : JS_WORKER);
     current.worker = worker;
-    current.timer = setTimeout(function () { send({ type: "out", id: id, t: "error", text: "Stopped: the code ran longer than " + Math.round(m.timeout / 1000) + " seconds." }); stopCurrent("timeout"); }, m.timeout);
+    function startRun() {
+      if (!current || current.id !== id) return;
+      current.timer = setTimeout(function () { send({ type: "out", id: id, t: "error", text: "Stopped: the code ran longer than " + Math.round(m.timeout / 1000) + " seconds." }); stopCurrent("timeout"); }, m.timeout);
+      worker.postMessage(lang === "py" ? { t: "run", code: code } : code);
+    }
     worker.onmessage = function (e) {
       if (!current || current.id !== id) return;
       var d = e.data || {};
+      if (d.ready || d.loadError) return;                  // handled by ensurePy
       if (d.done) {
         if (lang !== "js") return finish(id, d.ok, started);
         clearTimeout(current.quiet);                       // let timers/promises print for a moment
@@ -146,8 +173,21 @@
       emit(d.t, d.text, d.line);
       if (current.quiet) { clearTimeout(current.quiet); current.quiet = setTimeout(function () { finish(id, current ? current.mainOk : true, started); }, 500); }
     };
-    worker.onerror = function (e) { emit("error", e.message || "Worker error"); if (current && current.persistent) pyWorker = null; finish(id, false, started); };
-    worker.postMessage(code);
+    worker.onerror = function (e) { if (lang === "py" && pyState !== "ready") return; emit("error", e.message || "Worker error"); if (current && current.persistent) { pyWorker = null; pyState = "idle"; } finish(id, false, started); };
+    if (lang === "py" && pyState !== "ready") {
+      emit("info", "Downloading the Python runtime (first time only, about 10 MB). On a slow connection this can take a while. It keeps going, with no time limit.");
+      send({ type: "phase", id: id, phase: "loading" });
+      var slow = setTimeout(function () { if (current && current.id === id && pyState === "loading") emit("info", "Still downloading Python\u2026 slow connection? Hang tight, this only happens once."); }, 25000);
+      pyWaiters.push(function (ok) {
+        clearTimeout(slow);
+        if (!current || current.id !== id) return;
+        if (!ok) { emit("error", "Couldn't download Python. Check your connection and press Run again."); current = null; return send({ type: "done", id: id, ok: false, ms: Math.round(performance.now() - started) }); }
+        emit("info", "Python is ready."); send({ type: "phase", id: id, phase: "running" });
+        startRun();
+      });
+      return;
+    }
+    startRun();
   }
 
   function preview(html) {
@@ -163,6 +203,7 @@
     var m = e.data || {};
     if (m.type === "run" && /^(js|ts|py|sql|lua)$/.test(m.lang)) run({ id: m.id, lang: m.lang, code: String(m.code || ""), timeout: Math.min(Number(m.timeout) || 5000, 30000) });
     else if (m.type === "stop") stopCurrent("stopped");
+    else if (m.type === "preload" && m.lang === "py") ensurePy();
     else if (m.type === "lint" && m.lang === "js") send({ type: "lint-result", id: m.id, errors: lintJs(String(m.code || "")) });
     else if (m.type === "preview") preview(m.html);
   });

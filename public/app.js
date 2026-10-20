@@ -268,61 +268,95 @@ if (window.ResizeObserver) new ResizeObserver(syncScroll).observe($("code"));
 const terms = $("terms");
 $("termsBtn").addEventListener("click", () => terms.showModal());
 /* ---------- play phonk: public for everyone; a floating player you can drag, minimize and close without stopping the music ---------- */
-const pw = $("phonkWin"), phonkList = $("phonkList"), phonkMsg = $("phonkMsg"), phonkPlayer = $("phonkPlayer"), phonkBubble = $("phonkBubble"), phonkBar = $("phonkBar");
-let phonkNames = null, phonkNow = null, pwOpen = false, pwPos = null, pwDrag = null;
-const phonkRows = new Map();
+/* Songs come from two places: your own files (/phonk/phonks.json -> /phonk/<name>.mp3) and an online search through this server (Audius). */
+const pw = $("phonkWin"), phonkList = $("phonkList"), phonkResults = $("phonkResults"), phonkMsg = $("phonkMsg"), phonkPlayer = $("phonkPlayer"), phonkBubble = $("phonkBubble"), phonkBar = $("phonkBar");
+let phonkNames = null, phonkNow = null, phonkItem = null, pwOpen = false, pwPos = null, pwDrag = null, phonkSeq = 0, phonkTimer = 0, phonkFirst = true;
+const phonkRows = new Map();                                              // key -> <li>
 const fmtT = t => (isFinite(t) && t > 0) ? Math.floor(t / 60) + ":" + String(Math.floor(t % 60)).padStart(2, "0") : "0:00";
 const phonkIsPlaying = () => phonkNow !== null && !phonkPlayer.paused && !phonkPlayer.ended;
 function phonkNote(t, bad) { phonkMsg.textContent = t || ""; phonkMsg.classList.toggle("bad", Boolean(bad)); }
 function phonkSync() {
   const playing = phonkIsPlaying();
-  for (const [n, li] of phonkRows) { li.classList.toggle("active", n === phonkNow); li.classList.toggle("playing", n === phonkNow && playing); li.setAttribute("aria-pressed", String(n === phonkNow && playing)); }
+  for (const [k, li] of phonkRows) { li.classList.toggle("active", k === phonkNow); li.classList.toggle("playing", k === phonkNow && playing); li.setAttribute("aria-pressed", String(k === phonkNow && playing)); }
   $("phonkBtn").classList.toggle("playing", playing); pw.classList.toggle("playing", playing);
   $("phonkBtn").querySelector(".label").textContent = playing ? "Now playing" : "Play phonk";
   phonkBubble.classList.toggle("show", !pwOpen && phonkNow !== null); phonkBubble.classList.toggle("playing", playing);
-  $("phonkNowName").textContent = phonkNow === null ? "Nothing playing" : phonkNow;
+  $("phonkNowName").textContent = phonkItem ? phonkItem.title : "Nothing playing";
   $("phonkToggle").disabled = $("phonkStop").disabled = phonkNow === null;
 }
 function phonkProgress() {
   const d = phonkPlayer.duration, t = phonkPlayer.currentTime, pct = d > 0 ? Math.min(100, t / d * 100) : 0;
   $("phonkFill").style.width = pct + "%"; $("phonkProg").setAttribute("aria-valuenow", String(Math.round(pct)));
-  $("phonkTime").textContent = phonkNow === null ? "0:00" : fmtT(t) + (d > 0 ? " / " + fmtT(d) : "");
+  $("phonkTime").textContent = phonkNow === null ? "0:00" : fmtT(t) + (d > 0 && isFinite(d) ? " / " + fmtT(d) : "");
 }
 function phonkToggle() {
   if (phonkNow === null) return;
   if (phonkPlayer.paused) { if (phonkPlayer.ended) phonkPlayer.currentTime = 0; phonkPlayer.play().catch(() => {}); } else phonkPlayer.pause();
 }
-function phonkPlay(name) {
-  if (phonkNow === name) { phonkToggle(); return; }                      // same one: pause / resume
-  phonkNow = name; phonkNote(""); phonkPlayer.src = "/phonk/" + encodeURIComponent(name) + ".mp3";
+function phonkPlay(item) {
+  if (phonkNow === item.key) { phonkToggle(); return; }                  // same one: pause / resume
+  phonkNow = item.key; phonkItem = item; phonkNote(""); phonkPlayer.src = item.src;
   phonkPlayer.play().catch(() => {}); phonkSync(); phonkProgress();
-  if ("mediaSession" in navigator && window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: name, artist: "CodeRelay" });
+  if ("mediaSession" in navigator && window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: item.title, artist: item.artist || "CodeRelay" });
 }
-function phonkStop() { phonkPlayer.pause(); phonkPlayer.removeAttribute("src"); phonkPlayer.load(); phonkNow = null; phonkSync(); phonkProgress(); }
+function phonkStop() { phonkPlayer.pause(); phonkPlayer.removeAttribute("src"); phonkPlayer.load(); phonkNow = null; phonkItem = null; phonkSync(); phonkProgress(); }
 for (const ev of ["play", "pause", "ended"]) phonkPlayer.addEventListener(ev, phonkSync);
 for (const ev of ["timeupdate", "loadedmetadata", "durationchange"]) phonkPlayer.addEventListener(ev, phonkProgress);
-phonkPlayer.addEventListener("error", () => { if (phonkNow === null) return; const n = phonkNow; phonkNow = null; phonkSync(); phonkProgress(); phonkNote("Couldn\u2019t play \u201c" + n + "\u201d. Check that " + n + ".mp3 is in the phonk folder.", true); });
+phonkPlayer.addEventListener("error", () => {
+  if (phonkNow === null || !phonkPlayer.getAttribute("src")) return;
+  const it = phonkItem; phonkNow = null; phonkItem = null; phonkSync(); phonkProgress();
+  phonkNote(it && it.online ? "Couldn\u2019t play \u201c" + it.title + "\u201d. Try another song." : "Couldn\u2019t play \u201c" + (it ? it.title : "") + "\u201d. Check that " + (it ? it.title : "") + ".mp3 is in the phonk folder.", true);
+});
 if ("mediaSession" in navigator) { try { navigator.mediaSession.setActionHandler("play", phonkToggle); navigator.mediaSession.setActionHandler("pause", phonkToggle); navigator.mediaSession.setActionHandler("stop", phonkStop); } catch {} }
 
+function phonkRow(item, i) {
+  const li = document.createElement("li"); li.className = "phonk-row"; li.tabIndex = 0; li.setAttribute("role", "button"); li.style.setProperty("--i", Math.min(i, 12));
+  const eq = document.createElement("span"); eq.className = "eq"; eq.setAttribute("aria-hidden", "true"); eq.append(document.createElement("i"), document.createElement("i"), document.createElement("i"));
+  const t = document.createElement("span"); t.className = "pn";
+  const ti = document.createElement("span"); ti.className = "pt"; ti.textContent = item.title; t.append(ti);
+  if (item.artist) { const ar = document.createElement("small"); ar.className = "pa"; ar.textContent = item.artist; t.append(ar); }
+  li.append(eq, t);
+  if (item.duration) { const d = document.createElement("span"); d.className = "pd"; d.textContent = fmtT(item.duration); li.append(d); }
+  li.addEventListener("click", () => phonkPlay(item));
+  li.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); phonkPlay(item); } });
+  phonkRows.set(item.key, li); return li;
+}
 async function phonkLoad() {
   if (phonkNames) return;
   try {
     const r = await fetch("/phonk/phonks.json"); if (!r.ok) throw 0;
     const d = await r.json(); phonkNames = (Array.isArray(d) ? d : []).map(String).map(x => x.trim()).filter(Boolean).slice(0, 200);
-  } catch { phonkNames = null; phonkNote("Couldn\u2019t load the phonk list.", true); return; }
-  phonkList.textContent = ""; phonkRows.clear();
-  if (!phonkNames.length) { phonkNote("No phonks added yet."); return; }
-  phonkNames.forEach((n, i) => {
-    const li = document.createElement("li"); li.className = "phonk-row"; li.tabIndex = 0; li.setAttribute("role", "button"); li.style.setProperty("--i", i);
-    const eq = document.createElement("span"); eq.className = "eq"; eq.setAttribute("aria-hidden", "true"); eq.append(document.createElement("i"), document.createElement("i"), document.createElement("i"));
-    const t = document.createElement("span"); t.className = "pn"; t.textContent = n;
-    li.append(eq, t);
-    li.addEventListener("click", () => phonkPlay(n));
-    li.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); phonkPlay(n); } });
-    phonkRows.set(n, li); phonkList.append(li);
-  });
+  } catch { phonkNames = []; }
+  phonkList.textContent = "";
+  phonkNames.forEach((n, i) => phonkList.append(phonkRow({ key: "local:" + n, title: n, src: "/phonk/" + encodeURIComponent(n) + ".mp3" }, i)));
+  $("phonkMineH").classList.toggle("hidden", !phonkNames.length);
   phonkSync();
+  if (phonkFirst) { phonkFirst = false; phonkSearch("phonk", true); }       // show something to play right away
 }
+/* online search */
+function phonkSkeleton() { phonkResults.textContent = ""; for (let i = 0; i < 4; i++) { const li = document.createElement("li"); li.className = "phonk-row skel"; li.style.setProperty("--i", i); phonkResults.append(li); } $("phonkResH").classList.remove("hidden"); }
+async function phonkSearch(q, quiet) {
+  q = String(q || "").trim(); const seq = ++phonkSeq;
+  for (const [k] of phonkRows) if (k.startsWith("audius:")) phonkRows.delete(k);
+  if (!q) { phonkResults.textContent = ""; $("phonkResH").classList.add("hidden"); phonkNote(""); return; }
+  phonkNote(""); phonkSkeleton(); $("phonkSearch").classList.add("busy");
+  try {
+    const r = await fetch("/api/music/search?q=" + encodeURIComponent(q)), d = await r.json().catch(() => ({}));
+    if (seq !== phonkSeq) return;
+    if (!r.ok) throw new Error(d.error || (r.status === 429 ? "Too many searches. Wait a moment." : "Search isn\u2019t available right now."));
+    phonkResults.textContent = "";
+    const tracks = Array.isArray(d.tracks) ? d.tracks : [];
+    tracks.forEach((t, i) => phonkResults.append(phonkRow({ key: "audius:" + t.id, title: t.title, artist: t.artist, duration: t.duration, online: true, src: "/api/music/stream/" + encodeURIComponent(t.id) }, i)));
+    $("phonkResH").classList.toggle("hidden", !tracks.length);
+    phonkNote(tracks.length ? "" : "No songs found for \u201c" + q + "\u201d.");
+    phonkSync();
+  } catch (e) {
+    if (seq !== phonkSeq) return;
+    phonkResults.textContent = ""; $("phonkResH").classList.add("hidden"); if (!quiet) phonkNote(e.message, true);
+  } finally { if (seq === phonkSeq) $("phonkSearch").classList.remove("busy"); }
+}
+$("phonkSearch").addEventListener("submit", e => { e.preventDefault(); clearTimeout(phonkTimer); phonkSearch($("phonkQ").value); });
+$("phonkQ").addEventListener("input", () => { clearTimeout(phonkTimer); const v = $("phonkQ").value.trim(); phonkTimer = setTimeout(() => { if (v.length >= 2 || !v) phonkSearch(v || "phonk"); }, 550); });
 
 /* window: open / close / minimize / drag. Closing only hides the window; the <audio> lives outside it, so the music keeps going. */
 function pwApply(x, y) {
@@ -362,6 +396,43 @@ prog.addEventListener("pointerdown", e => { seeking = true; prog.setPointerCaptu
 prog.addEventListener("pointermove", e => { if (seeking) seekAt(e); });
 for (const ev of ["pointerup", "pointercancel"]) prog.addEventListener(ev, () => { seeking = false; });
 phonkSync(); phonkProgress();
+
+/* ---------- feedback: sent to the developer's Discord by the server ---------- */
+const fbDlg = $("feedbackDlg"), fbText = $("fbText"), fbMsg = $("fbMsg");
+let fbKind = "idea", fbBusy = false;
+function fbNote(t, kind) { fbMsg.textContent = t || ""; fbMsg.className = "fb-msg" + (kind ? " " + kind : ""); }
+function closeFb() {
+  if (reduceMotion) return fbDlg.close();
+  fbDlg.classList.add("closing");
+  setTimeout(() => { fbDlg.close(); fbDlg.classList.remove("closing"); }, 220);
+}
+$("feedbackBtn").addEventListener("click", () => {
+  if (!curUser) { openNameDialog(); return; }                       // feedback needs a name so it is clear who sent it
+  fbNote(""); fbDlg.showModal(); fbText.focus();
+});
+$("fbKinds").addEventListener("click", e => {
+  const c = e.target.closest(".fb-chip"); if (!c) return;
+  fbKind = c.dataset.kind;
+  $("fbKinds").querySelectorAll(".fb-chip").forEach(x => { const on = x === c; x.classList.toggle("on", on); x.setAttribute("aria-checked", String(on)); });
+});
+fbText.addEventListener("input", () => { $("fbCount").textContent = fbText.value.length + " / 1000"; fbNote(""); });
+$("fbCancel").addEventListener("click", closeFb);
+fbDlg.addEventListener("cancel", e => { e.preventDefault(); if (!fbBusy) closeFb(); });
+fbDlg.addEventListener("click", e => { if (e.target === fbDlg && !fbBusy) closeFb(); });
+$("fbSend").addEventListener("click", async () => {
+  if (fbBusy) return;
+  const message = fbText.value.trim();
+  if (message.length < 20) { fbNote("Please write at least 20 characters so we can understand (" + message.length + "/20).", "bad"); fbText.focus(); return; }
+  fbBusy = true; $("fbSend").disabled = true; $("fbSend").classList.add("is-loading"); fbNote("Sending\u2026");
+  try {
+    const r = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: fbKind, message }) }), d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "Couldn't send your feedback. Please try again.");
+    fbText.value = ""; $("fbCount").textContent = "0 / 1000"; fbNote("Thank you! Your feedback was sent.", "ok");
+    flashLabel($("feedbackBtn"), "Thanks!", 2200);
+    setTimeout(() => { if (fbDlg.open) closeFb(); }, 1100);
+  } catch (e) { fbNote(e.message, "bad"); }
+  finally { fbBusy = false; $("fbSend").disabled = false; $("fbSend").classList.remove("is-loading"); }
+});
 
 function closeTerms() {
   if (reduceMotion) return terms.close();
@@ -403,7 +474,7 @@ function ensureRunner() {
   runner = document.createElement("iframe");
   runner.src = "/runner"; runner.className = "runner-frame"; runner.title = "Sandboxed code runner";
   runner.setAttribute("sandbox", "allow-scripts");
-  runnerReady = new Promise((res, rej) => { runner._ready = res; setTimeout(() => rej(new Error("The code runner did not start.")), 6000); });
+  runnerReady = new Promise((res, rej) => { runner._ready = res; setTimeout(() => rej(new Error("The code runner did not start. Check your connection and try again.")), 20000); });
   document.body.appendChild(runner);
   return runnerReady;
 }
@@ -416,12 +487,15 @@ window.addEventListener("message", e => {
   if (!runner || e.source !== runner.contentWindow) return;      // only our own sandboxed frames
   if (m.type === "ready" && runner._ready) runner._ready();
   else if (m.type === "out" && activeRun && m.id === activeRun.id) addLine(["log", "error", "info"].includes(m.t) ? m.t : "log", String(m.text), Number(m.line) || 0);
+  else if (m.type === "phase" && activeRun && m.id === activeRun.id) armWatchdog(m.id, m.phase === "loading" ? 30 * 60 * 1000 : 45000);
+  else if (m.type === "pystate" && !activeRun) { if (m.state === "loading") addLine("info", "Downloading Python in the background (first time only, about 10 MB)…"); else if (m.state === "ready") addLine("info", "Python is ready."); else if (m.state === "error") addLine("error", String(m.text || "Couldn’t download Python.")); }
   else if (m.type === "done" && activeRun && m.id === activeRun.id) {
+    clearTimeout(activeRun.wd);
     addLine(m.ok ? "meta" : "error", (m.ok ? "Finished in " : m.stopped ? "Stopped after " : "Failed after ") + (m.ms || 0) + " ms");
     activeRun = null; setRunning(false);
   }
 });
-function destroyRunner() { if (runner) runner.remove(); runner = null; runnerReady = null; }
+function destroyRunner() { if (runner) runner.remove(); runner = null; runnerReady = null; pyPreloaded = false; }
 function previewHtml() {
   const name = resolvedLanguage(), code = $("code").value;
   if (name === "HTML") return code;
@@ -453,6 +527,17 @@ $("viewCode").addEventListener("click", () => showView("code"));
 $("viewPreview").addEventListener("click", () => showView("preview"));
 $("code").addEventListener("input", schedulePreview);
 $("language").addEventListener("change", () => { if (view === "preview") renderPreview(); });
+/* Start downloading Python as soon as the code looks like Python, so it is usually ready before Run is pressed. */
+let pyPreloaded = false, preloadTimer = 0;
+function maybePreloadPython() {
+  if (pyPreloaded || activeRun || navigator.connection && navigator.connection.saveData) return;
+  if (resolvedLanguage() !== "Python" || $("code").value.trim().length < 8) return;
+  pyPreloaded = true;
+  ensureRunner().then(() => { if (runner) runner.contentWindow.postMessage({ type: "preload", lang: "py" }, "*"); }).catch(() => { pyPreloaded = false; });
+}
+const schedulePreload = () => { clearTimeout(preloadTimer); preloadTimer = setTimeout(maybePreloadPython, 1200); };
+$("code").addEventListener("input", schedulePreload);
+$("language").addEventListener("change", schedulePreload);
 async function runCode() {
   if (activeRun) return;
   const code = $("code").value, name = resolvedLanguage(), rt = RUNTIME[name];
@@ -466,7 +551,13 @@ async function runCode() {
   addLine("meta", "Running " + name + "…");
   const fast = rt === "js" || rt === "ts" || rt === "lua";
   runner.contentWindow.postMessage({ type: "run", id, lang: rt, code, timeout: fast ? 5000 : 30000 }, "*");
-  setTimeout(() => { if (activeRun && activeRun.id === id) { destroyRunner(); addLine("error", "Stopped: the runner stopped responding."); activeRun = null; setRunning(false); } }, rt === "js" ? 7000 : 75000);
+  armWatchdog(id, rt === "js" ? 7000 : rt === "py" ? 45000 : 75000);
+}
+/* If the runner goes silent we stop it. While Python is downloading it tells us (phase "loading"), and we wait for as long as it takes. */
+function armWatchdog(id, ms) {
+  if (!activeRun || activeRun.id !== id) return;
+  clearTimeout(activeRun.wd);
+  activeRun.wd = setTimeout(() => { if (activeRun && activeRun.id === id) { destroyRunner(); addLine("error", "Stopped: the runner stopped responding."); activeRun = null; setRunning(false); } }, ms);
 }
 $("runBtn").addEventListener("click", runCode);
 $("stopBtn").addEventListener("click", () => {

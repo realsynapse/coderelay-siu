@@ -454,6 +454,7 @@ function broadcastHistory(id, entry) { queueHistory(id, rooms.get(id), entry); }
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.post("/api/rooms", ipLimit("create", 20 / 3600, 10), async (req, res) => {
   res.set("Cache-Control", "no-store");
+  if (!sameOrigin(req)) return res.status(403).json({ error: "Not allowed." });
   if (!db) return res.status(503).json({ error: "Database is not configured on the server." });
   const code = typeof req.body.code === "string" ? req.body.code : "";
   const language = typeof req.body.language === "string" ? req.body.language.slice(0, 60) : "Plain text";
@@ -518,6 +519,103 @@ app.post("/api/me", ipLimit("user", 20 / 3600, 10), async (req, res) => {
     if (err && err.taken) return res.status(409).json({ error: "That name is already taken. Please choose another.", taken: true });
     console.error("[CodeRelay] Create user failed:", err.message || err); res.status(500).json({ error: "Could not save your name. Please try again." }); }
 });
+// ---------- feedback -> Telegram (or Discord) ----------
+// The bot token / webhook link are secrets: they live only in the server environment, are never sent to the browser and never logged.
+const FEEDBACK_KINDS = { bug: { label: "Bug", icon: "\ud83d\udc1e", color: 0xe5484d }, idea: { label: "Idea", icon: "\ud83d\udca1", color: 0x8b5cf6 }, other: { label: "Other", icon: "\ud83d\udcac", color: 0x3fb68b } };
+function feedbackTarget() {
+  const tok = String(process.env.TELEGRAM_BOT_TOKEN || "").trim(), chat = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+  if (/^\d{6,12}:[\w-]{30,60}$/.test(tok) && /^(-?\d{5,20}|@[A-Za-z][\w]{4,31})$/.test(chat)) return { type: "telegram", tok, chat };
+  const hook = String(process.env.FEEDBACK_WEBHOOK_URL || "").trim();
+  if (/^https:\/\/(?:discord|discordapp)\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/.test(hook)) return { type: "discord", hook };
+  return null;
+}
+async function deliverFeedback(target, kind, who, message) {
+  const signal = AbortSignal.timeout(8000);
+  if (target.type === "telegram") {
+    const r = await fetch("https://api.telegram.org/bot" + target.tok + "/sendMessage", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal,
+      body: JSON.stringify({ chat_id: target.chat, disable_web_page_preview: true, text: kind.icon + " " + kind.label + " feedback\nFrom: " + who + "\n\n" + message })   // plain text: no formatting can be injected
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error("Telegram answered " + r.status);
+    return;
+  }
+  const r = await fetch(target.hook, {
+    method: "POST", headers: { "Content-Type": "application/json" }, signal,
+    body: JSON.stringify({ username: "CodeRelay Feedback", allowed_mentions: { parse: [] },          // a message can never ping @everyone or roles
+      embeds: [{ title: kind.label + " feedback", description: message, color: kind.color, fields: [{ name: "From", value: who.slice(0, 200) }], footer: { text: "CodeRelay" }, timestamp: new Date().toISOString() }] })
+  });
+  if (!r.ok) throw new Error("Discord answered " + r.status);
+}
+const feedbackSent = new Map();                                    // user id -> times of recent messages
+const FEEDBACK_GAP_MS = 20 * 1000, FEEDBACK_PER_HOUR = 5;
+const feedbackAll = [], FEEDBACK_GLOBAL_PER_HOUR = 60;           // site-wide cap so a spam wave can never flood the Telegram chat
+app.post("/api/feedback", ipLimit("feedback", 10 / 3600, 5), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  if (!sameOrigin(req)) return res.status(403).json({ error: "Not allowed." });
+  const user = await userFromCookie(req.headers.cookie).catch(() => null);
+  if (!user) return res.status(401).json({ error: "Pick your name first, then send your feedback." });
+  const target = feedbackTarget();
+  if (!target) return res.status(503).json({ error: "Feedback isn't set up on this server yet." });
+  const b = req.body || {}, kind = FEEDBACK_KINDS[b.kind];
+  if (!kind || typeof b.message !== "string") return res.status(400).json({ error: "Choose a type and write a message." });
+  const message = b.message.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  if (message.length < 5) return res.status(400).json({ error: "Please write a little more (at least 5 characters)." });
+  if (message.length > 1000) return res.status(400).json({ error: "That's too long. Please keep it under 1000 characters." });
+  const nowG = Date.now(); while (feedbackAll.length && nowG - feedbackAll[0] > 3600 * 1000) feedbackAll.shift();
+  if (feedbackAll.length >= FEEDBACK_GLOBAL_PER_HOUR) return res.status(429).json({ error: "We're receiving a lot of feedback right now. Please try again a little later." });
+  const now = Date.now(), recent = (feedbackSent.get(user.id) || []).filter(t => now - t < 3600 * 1000);
+  if (recent.length && now - recent[recent.length - 1] < FEEDBACK_GAP_MS) return res.status(429).json({ error: "Please wait a few seconds before sending another." });
+  if (recent.length >= FEEDBACK_PER_HOUR) return res.status(429).json({ error: "You've sent a lot of feedback this hour. Thank you! Please try again later." });
+  try {
+    const who = user.name + " \u00b7 #" + user.id + (user.dev ? " \u00b7 developer" : user.role ? " \u00b7 " + user.role : "");
+    await deliverFeedback(target, kind, who.slice(0, 200), message);
+    recent.push(now); feedbackSent.set(user.id, recent); feedbackAll.push(now);
+    if (feedbackSent.size > 2000) feedbackSent.delete(feedbackSent.keys().next().value);
+    res.json({ ok: true });
+  } catch (err) { console.error("[CodeRelay] Feedback failed:", err && err.name === "TimeoutError" ? "timed out" : (err && err.message) || "error"); res.status(502).json({ error: "Couldn't send your feedback right now. Please try again in a moment." }); }
+});
+
+// ---------- phonk music search (Audius) ----------
+// Public for everyone. The browser only talks to this server; the optional Audius token stays here (AUDIUS_BEARER_TOKEN), never in public/.
+const AUDIUS_BASE = "https://api.audius.co/v1", AUDIUS_APP = "CodeRelay";
+const audiusHeaders = extra => ({ ...(process.env.AUDIUS_BEARER_TOKEN ? { Authorization: "Bearer " + process.env.AUDIUS_BEARER_TOKEN } : {}), ...(extra || {}) });
+const searchCache = new Map();                                   // query -> { at, tracks }; keeps repeat searches fast and cheap
+const SEARCH_TTL = 5 * 60 * 1000;
+app.get("/api/music/search", ipLimit("music-search", 2, 20), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const q = String(req.query.q || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!q) return res.json({ tracks: [] });
+  const key = q.toLowerCase(), hit = searchCache.get(key);
+  if (hit && Date.now() - hit.at < SEARCH_TTL) return res.json({ tracks: hit.tracks });
+  try {
+    const r = await fetch(AUDIUS_BASE + "/tracks/search?limit=20&app_name=" + AUDIUS_APP + "&query=" + encodeURIComponent(q), { headers: audiusHeaders({ Accept: "application/json" }), signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error("Audius search " + r.status);
+    const d = await r.json();
+    const tracks = (Array.isArray(d.data) ? d.data : [])
+      .filter(t => t && /^[A-Za-z0-9]{3,20}$/.test(String(t.id)) && t.is_streamable !== false && !t.is_stream_gated && !t.is_delete && !t.is_unlisted)
+      .slice(0, 20).map(t => ({ id: String(t.id), title: String(t.title || "Untitled").slice(0, 120), artist: String((t.user && t.user.name) || "Unknown artist").slice(0, 80), duration: Math.max(0, Number(t.duration) || 0) }));
+    if (searchCache.size > 200) searchCache.delete(searchCache.keys().next().value);
+    searchCache.set(key, { at: Date.now(), tracks });
+    res.json({ tracks });
+  } catch (err) { console.error("[CodeRelay] Music search failed:", err.message || err); res.status(502).json({ error: "Music search isn't available right now. Try again in a moment." }); }
+});
+// Streams the audio through this server (supports seeking), so the browser never needs the token and the page's security policy stays strict.
+app.get("/api/music/stream/:id", ipLimit("music-stream", 1, 40), async (req, res) => {
+  const id = String(req.params.id || "");
+  if (!/^[A-Za-z0-9]{3,20}$/.test(id)) return res.status(400).end();
+  const ctl = new AbortController(); res.on("close", () => ctl.abort());
+  try {
+    const up = await fetch(AUDIUS_BASE + "/tracks/" + id + "/stream?app_name=" + AUDIUS_APP, { headers: audiusHeaders(req.headers.range ? { Range: String(req.headers.range).slice(0, 60) } : {}), signal: ctl.signal, redirect: "follow" });
+    const type = String(up.headers.get("content-type") || "");
+    if (!(up.status === 200 || up.status === 206) || !/^(audio\/|application\/octet-stream)/i.test(type) || !up.body) return res.status(502).end();
+    res.status(up.status);
+    res.set({ "Content-Type": /^audio\//i.test(type) ? type : "audio/mpeg", "Accept-Ranges": up.headers.get("accept-ranges") || "bytes", "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" });
+    for (const h of ["content-length", "content-range"]) if (up.headers.get(h)) res.set(h, up.headers.get(h));
+    require("stream").Readable.fromWeb(up.body).on("error", () => res.destroy()).pipe(res);
+  } catch (err) { if (!res.headersSent) res.status(502).end(); else res.destroy(); }
+});
+
 // ---------- roles: only the developer can give or remove them ----------
 const notFound = res => res.status(404).type("text/plain").send("Not found");
 async function developerOnly(req, res) {
@@ -575,7 +673,14 @@ const io = new Server(server, {
   }
 });
 
+const socketsByIp = new Map(), MAX_SOCKETS_PER_IP = 40;
 io.on("connection", socket => {
+  const behindProxy = Boolean(process.env.TRUST_PROXY || process.env.RENDER);
+  const fwd = behindProxy ? String(socket.handshake.headers["x-forwarded-for"] || "").split(",")[0].trim() : "";
+  const ip = fwd || socket.handshake.address || "?";
+  if ((socketsByIp.get(ip) || 0) >= MAX_SOCKETS_PER_IP) { socket.disconnect(true); return; }
+  socketsByIp.set(ip, (socketsByIp.get(ip) || 0) + 1);
+  socket.on("disconnect", () => { const n = (socketsByIp.get(ip) || 1) - 1; if (n <= 0) socketsByIp.delete(ip); else socketsByIp.set(ip, n); });
   userFromCookie(socket.request.headers.cookie).then(u => { if (u) socket.data.uid = u.id; }).catch(() => {});
   const limits = { op: mkBucket(60, 120), cursor: mkBucket(40, 60), misc: mkBucket(8, 20) };
   let strikes = 0;

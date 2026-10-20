@@ -24,7 +24,7 @@
 
 <header class="reveal" style="--d:0">
   <div class="brand"><div class="logo"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M24 18 10 32l14 14"/><path d="M40 18l14 14-14 14"/></svg></div><div><h1>CodeRelay</h1><div class="sub">One editor. Your whole team.</div></div></div>
-  <div class="header-actions"><span id="userChip" class="user-chip hidden"></span><button id="rolesBtn" class="hidden"><span class="label">Manage roles</span></button><button id="phonkBtn"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span class="label">Play phonk</span></button><button id="termsBtn">Terms &amp; Conditions</button></div>
+  <div class="header-actions"><span id="userChip" class="user-chip hidden"></span><button id="rolesBtn" class="hidden"><span class="label">Manage roles</span></button><button id="phonkBtn"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span class="label">Play phonk</span></button><button id="feedbackBtn"><span class="label">Feedback</span></button><button id="termsBtn">Terms &amp; Conditions</button></div>
 </header>
 <main>
   <div class="intro reveal" style="--d:1"><div><h2>Code together, simply.</h2><p>Share one QR code and edit the same code live. The owner can lock editing while keeping code viewable and copyable. Your workspace is saved, so the link keeps working after the server restarts. Any language.</p></div><span id="roomPill" class="room-pill">New workspace</span></div>
@@ -66,14 +66,40 @@
 </main>
 <div class="footer reveal" style="--d:5"><span>CodeRelay · <span class="crown" id="crown">A Crown Lab Team project</span></span><span>Workspaces are saved securely</span></div>
 
-<dialog id="terms"><h2>Terms &amp; Conditions</h2>
-<p><strong>1. Shared editing.</strong> Anyone with the workspace link can view and edit the current code until the owner turns on the editing lock. Share links only with people you trust.</p>
-<p><strong>2. Owner editing lock.</strong> The owner can lock editing. Other visitors can still read and copy code, but the server rejects their edit attempts. This is an editing permission lock, not encryption of the code contents.</p>
-<p><strong>3. Saved workspaces.</strong> Workspace code is stored in a database so it is still there after the server restarts. Changes made by anyone with edit access are saved too. CodeRelay keeps only the latest version, not an edit history.</p>
-<p><strong>4. No secrets.</strong> Do not paste passwords, API keys, access tokens, private keys, personal information, or confidential code into a shared workspace.</p>
-<p><strong>5. Availability.</strong> The service is provided as-is and may be unavailable from time to time. A QR code is only a link to the workspace.</p>
-<p><strong>6. Responsible use.</strong> Use this service only for lawful collaboration. These terms are a draft, not legal advice.</p>
-<button id="closeTerms"><span class="label">Close</span></button></dialog>
+<dialog id="terms"><h2>Terms &amp; Privacy</h2>
+<p class="terms-meta">Last updated: October 2026</p>
+<p>Welcome to CodeRelay, a shared coding workspace by Crown Lab Team. By using CodeRelay you agree to these terms. They are short and written in plain language.</p>
+
+<h3>1. Shared workspaces</h3>
+<p>A workspace is created with a private link and QR code. Anyone who has the link can open the workspace and, unless the owner has locked it, edit the code. Share the link only with people you want to collaborate with.</p>
+
+<h3>2. Owner controls</h3>
+<p>The workspace owner can lock editing at any time. While locked, other participants can still read and copy the code, but cannot change it. The owner can also delete the workspace, which permanently removes its saved content.</p>
+
+<h3>3. Your code and data</h3>
+<p>Your code belongs to you and your team. CodeRelay does not claim any ownership of it. We store only what is needed to run the service: the latest version of the workspace content, the display names and numbers of participants, and basic technical data needed to keep the service secure and reliable.</p>
+
+<h3>4. Security</h3>
+<p>Workspace content is encrypted at rest on our servers using AES-256-GCM, and access to a workspace requires its link. We take reasonable care to protect your data, but no online service can guarantee absolute security. For this reason, we recommend keeping sensitive credentials, such as passwords and private keys, in a dedicated secrets manager rather than in shared code.</p>
+
+<h3>5. Acceptable use</h3>
+<p>Use CodeRelay for lawful learning, collaboration and development. Please do not use it to harm others, to distribute malware, to infringe someone else's rights, to attack or disrupt the service, or to attempt to access workspaces you were not invited to. Running code happens in a restricted sandbox in your browser; do not try to bypass it.</p>
+
+<h3>6. Content and removal</h3>
+<p>You are responsible for the content you add. We may remove a workspace or restrict access if it is used in breach of these terms or to protect the service and its users.</p>
+
+<h3>7. Feedback</h3>
+<p>If you send feedback, you allow us to use it to improve CodeRelay. Please do not include personal or confidential information in feedback.</p>
+
+<h3>8. Availability</h3>
+<p>We work to keep CodeRelay running smoothly, but the service is provided "as is" and may occasionally be unavailable or change. Keep a copy of important code in your own project or repository.</p>
+
+<h3>9. Limitation of liability</h3>
+<p>To the extent permitted by law, Crown Lab Team is not liable for indirect or consequential losses arising from use of the service. Nothing in these terms limits rights you have under applicable law.</p>
+
+<h3>10. Changes and contact</h3>
+<p>We may update these terms from time to time; the date above shows the latest version. Continuing to use CodeRelay means you accept the updated terms. Questions or concerns can be sent through the Feedback button.</p>
+<button id="closeTerms"><span class="label">I understand</span></button></dialog>
 
 
 
@@ -95,7 +121,17 @@
     <button id="phonkX" class="pw-ico" type="button" aria-label="Close (music keeps playing)"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 3.5l7 7m0-7l-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   </div>
   <div id="phonkFold" class="pw-fold"><div>
-    <ul id="phonkList" class="phonk-list"></ul>
+    <form id="phonkSearch" class="pw-search" role="search" autocomplete="off">
+      <svg class="pw-s-ico" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10.6 10.6L14 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <input id="phonkQ" type="search" maxlength="80" placeholder="Search songs online…" aria-label="Search songs online" enterkeyhint="search">
+      <button id="phonkGo" type="submit" aria-label="Search"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7h9M8 3.2L11.8 7 8 10.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </form>
+    <div id="phonkScroll" class="phonk-scroll">
+      <h4 id="phonkMineH" class="pw-h hidden">My phonks</h4>
+      <ul id="phonkList" class="phonk-list"></ul>
+      <h4 id="phonkResH" class="pw-h hidden">Search results <small>via Audius</small></h4>
+      <ul id="phonkResults" class="phonk-list"></ul>
+    </div>
     <p id="phonkMsg" class="phonk-msg"></p>
   </div></div>
   <div class="pw-now">
@@ -112,6 +148,19 @@
 </div>
 <button id="phonkBubble" type="button" aria-label="Open phonk player"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></button>
 <audio id="phonkPlayer" preload="none"></audio>
+
+<dialog id="feedbackDlg"><h2>Send feedback</h2>
+<p>Found a bug or have an idea? Your message goes straight to the developer.</p>
+<div id="fbKinds" class="fb-kinds" role="radiogroup" aria-label="Type of feedback">
+  <button type="button" class="fb-chip" role="radio" aria-checked="false" data-kind="bug">Bug Report</button>
+  <button type="button" class="fb-chip on" role="radio" aria-checked="true" data-kind="idea">Feature Suggestion</button>
+  <button type="button" class="fb-chip" role="radio" aria-checked="false" data-kind="other">General</button>
+</div>
+<textarea id="fbText" maxlength="1000" rows="5" placeholder="Tell us what happened or what you'd like to see (at least 20 characters)…" aria-label="Your feedback"></textarea>
+<div class="fb-foot"><span id="fbMsg" class="fb-msg" role="status"></span><span id="fbCount" class="fb-count">0 / 1000</span></div>
+
+<div class="dlg-actions"><button id="fbCancel" type="button"><span class="label">Cancel</span></button><button id="fbSend" class="primary" type="button"><span class="label">Submit feedback</span></button></div>
+<p class="fb-consent">By submitting, you agree that your feedback may be used to improve our site without compensation. We do not store personal tracking data.</p></dialog>
 
 <dialog id="rolesDlg"><h2>Manage roles</h2>
 <p>Search by name or number, then choose Admin, Moderator or None. Roles are tags only for now.</p>

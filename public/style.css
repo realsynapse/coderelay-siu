@@ -349,3 +349,191 @@ b.role-moderator,.pname.role-moderator{background:linear-gradient(100deg,#5eead4
 #phonkBubble:hover:not(:disabled){transform:scale(1.1);border-color:transparent;box-shadow:0 12px 28px -8px rgba(255,79,163,.7)}
 #phonkBubble:active:not(:disabled){transform:scale(.92)}
 @media (prefers-reduced-motion:reduce){#phonkBtn,#phonkBubble,.phonk-win.playing .pw-bar,#phonkBtn.playing,#phonkBubble.playing{animation:none}.playing .eq i{animation:none;height:10px}.phonk-row{animation:none}.phonk-win,.pw-fold{transition-duration:.01s}}
+
+/* ---------- phonk online search ---------- */
+.pw-search{position:relative;display:flex;align-items:center;margin:10px 10px 4px;border:1px solid var(--line-strong);border-radius:999px;background:rgba(10,10,12,.55);transition:border-color .3s,box-shadow .35s var(--ease),background .3s}
+.pw-search:focus-within{border-color:rgba(255,79,163,.65);box-shadow:0 0 0 3px rgba(139,92,246,.18),0 8px 24px -12px rgba(255,79,163,.6);background:rgba(10,10,12,.75)}
+.pw-s-ico{position:absolute;left:12px;color:var(--muted);pointer-events:none;transition:color .25s}
+.pw-search:focus-within .pw-s-ico{color:#ff4fa3}
+.pw-search input{flex:1;min-width:0;width:100%;margin:0;padding:9px 40px 9px 34px;border:0!important;background:transparent!important;color:var(--text);font-size:13px;outline:none;box-shadow:none!important;border-radius:999px}
+.pw-search input::-webkit-search-cancel-button{display:none}
+.phonk-win button#phonkGo{position:absolute;right:4px;top:50%;margin:-14px 0 0;width:28px;height:28px;padding:0;border:0;border-radius:50%;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(135deg,var(--red),#8b5cf6);box-shadow:0 6px 14px -6px rgba(217,48,62,.8);transition:transform .3s var(--ease-out),box-shadow .3s}
+.phonk-win button#phonkGo:hover:not(:disabled){transform:scale(1.12);box-shadow:0 8px 18px -4px rgba(255,79,163,.8)}
+.phonk-win button#phonkGo:active:not(:disabled){transform:scale(.9)}
+.pw-search.busy #phonkGo svg{animation:phonk-nudge .7s ease-in-out infinite}
+@keyframes phonk-nudge{0%,100%{transform:translateX(0)}50%{transform:translateX(3px)}}
+.phonk-scroll{max-height:250px;overflow:auto;padding:4px 10px 4px;scrollbar-width:thin}
+.phonk-scroll .phonk-list{max-height:none;overflow:visible;padding:0 0 6px}
+.pw-h{margin:8px 2px 6px;font-size:10.5px;letter-spacing:.9px;text-transform:uppercase;color:var(--faint);font-weight:700}
+.pw-h small{font-size:10px;letter-spacing:.3px;text-transform:none;font-weight:500;opacity:.8;margin-left:4px}
+.phonk-row .pn{display:flex;flex-direction:column;gap:1px}
+.phonk-row .pt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.phonk-row .pa{font-size:11px;font-weight:500;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.phonk-row .pd{flex:none;margin-left:8px;font-size:11px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
+@keyframes phonk-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.phonk-row.skel{height:44px;cursor:default;pointer-events:none;background:linear-gradient(100deg,rgba(255,255,255,.03) 30%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.03) 70%);background-size:200% 100%;animation:peerin .35s var(--ease-out) both,phonk-shimmer 1.4s linear infinite;animation-delay:calc(var(--i,0) * 40ms),0s}
+@media (prefers-reduced-motion:reduce){.phonk-row.skel{animation:none}.pw-search.busy #phonkGo svg{animation:none}}
+
+/* ---------- feedback ---------- */
+#feedbackDlg{max-width:480px}
+.fb-kinds{display:flex;gap:8px;margin:2px 0 12px;padding:4px;border:1px solid var(--line-strong);border-radius:999px;background:var(--bg);width:fit-content}
+#feedbackDlg button.fb-chip{margin:0;width:auto;padding:7px 18px;border:0;border-radius:999px;background:transparent;color:var(--muted);font-size:13px;font-weight:600;box-shadow:none;transition:background .3s var(--ease),color .25s,transform .25s var(--ease-out),box-shadow .35s}
+#feedbackDlg button.fb-chip::before{display:none}
+#feedbackDlg button.fb-chip:hover:not(.on){color:var(--text);background:rgba(255,255,255,.06);transform:none;box-shadow:none;border-color:transparent}
+#feedbackDlg button.fb-chip.on{color:#fff;background:linear-gradient(135deg,var(--red),#8b5cf6);box-shadow:0 8px 20px -10px rgba(217,48,62,.9)}
+#feedbackDlg button.fb-chip:active{transform:scale(.95)}
+#fbText{width:100%;resize:vertical;min-height:110px;max-height:260px;padding:12px;border:1px solid var(--line-strong);border-radius:10px;background:var(--bg);color:var(--text);font:inherit;font-size:14px;line-height:1.55;transition:border-color .25s,box-shadow .3s var(--ease)}
+#fbText:focus{outline:none;border-color:rgba(255,79,163,.65);box-shadow:0 0 0 3px rgba(139,92,246,.18)}
+.fb-foot{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:12px;min-height:18px}
+.fb-count{color:var(--faint);font-variant-numeric:tabular-nums;flex:none}
+.fb-msg{color:var(--muted)}.fb-msg.bad{color:#ffb4ba}.fb-msg.ok{color:#8be0a0}
+
+/* =====================================================================
+   RESPONSIVE: tablet + mobile only. Nothing here applies above 1024px,
+   so the desktop layout is untouched.
+   ===================================================================== */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{overflow-x:hidden}
+
+/* ---------- Tablet (<= 1024px) ---------- */
+@media(max-width:1024px){
+  header{padding:12px 20px;gap:10px;flex-wrap:nowrap}
+  .header-actions{display:flex;align-items:center;gap:8px;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px}
+  .header-actions::-webkit-scrollbar{display:none}
+  .header-actions button,.header-actions .user-chip{flex:none;white-space:nowrap}
+  main{margin:18px auto;padding:0 20px}
+  .layout{grid-template-columns:minmax(0,1fr);gap:16px}
+  .editor-top{gap:10px}
+  .editor-actions{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;max-width:100%}
+  .editor-actions::-webkit-scrollbar{display:none}
+  .editor-actions>*{flex:none;white-space:nowrap}
+  button{white-space:nowrap}
+  #code{height:60vh;height:60dvh}
+  .preview-box{height:60vh;height:60dvh}
+  .side{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:18px}
+  .side .side-section{min-width:0}
+  .side .full{grid-column:1/-1;margin:0}
+  .side .divider{display:none}
+  .qr-wrap{min-height:0;padding:10px}
+  .qr-wrap img{max-width:180px}
+}
+
+/* ---------- Phone (<= 640px) ---------- */
+@media(max-width:640px){
+  :root{--safe-b:env(safe-area-inset-bottom,0px)}
+  body{padding-bottom:var(--safe-b)}
+
+  /* header: logo on the left, a clean one-line scroller of actions underneath */
+  header{flex-wrap:wrap;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top,0px));gap:8px;position:sticky;top:0;z-index:30}
+  .logo{width:32px;height:32px}.logo svg{width:18px;height:18px}
+  .brand{gap:10px}
+  .brand h1{font-size:16px}
+  .brand .sub{display:none}
+  .header-actions{width:100%;gap:6px}
+  .header-actions button{width:auto;min-height:36px;padding:7px 12px;font-size:12.5px}
+  .user-chip{font-size:12px;padding:6px 10px}
+
+  main{margin:14px auto;padding:0 12px}
+
+  /* intro: short and calm */
+  .intro{gap:10px;margin-bottom:12px;align-items:center}
+  .intro>div{flex:1 1 100%}
+  .intro h2{font-size:20px;margin:0 0 4px;letter-spacing:-.3px}
+  .intro p{font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .room-pill{font-size:10.5px;padding:4px 10px}
+
+  .card{border-radius:12px}
+
+  /* editor toolbar */
+  .editor-top{padding:10px 12px;flex-direction:column;align-items:stretch;gap:10px}
+  .top-left{display:flex;align-items:center;gap:10px;width:100%}
+  .top-left>div:last-child{flex:1;min-width:0;display:flex;align-items:center;gap:8px}
+  .editor-top label{display:none}
+  select{margin-left:0;flex:1;min-width:0;max-width:none;width:100%;min-height:40px;font-size:16px}
+  .seg{flex:none}
+  .seg-btn{padding:9px 14px;min-height:40px}
+  .editor-actions{width:100%;gap:8px;padding-bottom:2px}
+  .editor-actions button{min-height:40px;padding:8px 14px}
+  .lock-indicator{font-size:11px;padding:6px 9px}
+
+  /* code area */
+  #hl,#code{padding:14px;font-size:13px;line-height:1.6}
+  #code{min-height:260px;height:calc(100dvh - 330px);max-height:70vh;resize:none}
+  #code{font-size:16px;line-height:1.6;-webkit-text-size-adjust:100%}
+  #hl{font-size:16px;line-height:1.6}
+  .preview-box{height:calc(100dvh - 330px);min-height:260px}
+  .editor-bottom{padding:8px 12px;font-size:11.5px;flex-wrap:nowrap}
+  .editor-bottom span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+  /* console */
+  .console-bar{padding:8px 12px;gap:8px}
+  .console-lang{display:none}
+  .console-bar button{min-height:34px}
+  .console-out{height:150px;padding:10px 12px;font-size:12px}
+
+  /* side panel becomes simple stacked cards */
+  .side{display:block;padding:16px}
+  .side .divider+.side-section{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
+  .side p{margin-bottom:12px}
+  .qr-wrap{padding:12px;max-width:240px;margin:0 auto}
+  .qr-wrap img{max-width:100%}
+  .linkbox input{font-size:16px;padding:10px;min-height:42px}
+  .side button{min-height:44px;margin-top:8px}
+  .linkbox button{min-height:42px;margin:0}
+  .peer{padding:10px}
+
+  .footer{padding:4px 14px 22px;flex-direction:column;gap:4px;font-size:11.5px}
+
+  /* dialogs: bottom sheets, easy to reach with a thumb */
+  dialog{width:100%;max-width:none;margin:auto 0 0;border-radius:18px 18px 0 0;border-bottom:0;padding:20px 16px calc(18px + env(safe-area-inset-bottom,0px));max-height:88dvh;overflow:auto}
+  dialog[open]{animation:sheet-in .35s var(--ease-out)}
+  dialog.closing{animation:sheet-out .22s var(--ease) forwards}
+  @keyframes sheet-in{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+  @keyframes sheet-out{to{transform:translateY(30px);opacity:0}}
+  dialog h2{font-size:18px}
+  dialog input,dialog textarea{font-size:16px}
+  dialog button{min-height:44px;width:100%}
+  .dlg-actions{display:flex;flex-direction:column-reverse;gap:8px}
+  .dlg-actions button{margin:0}
+  #feedbackDlg button.fb-chip{width:auto;min-height:36px}
+  .roles-list{max-height:40dvh}
+
+  /* phonk player: full-width mini bar above the safe area */
+  .phonk-win{left:8px!important;right:8px!important;bottom:calc(8px + var(--safe-b))!important;width:auto}
+  .phonk-win.free{left:8px;right:8px;top:auto;bottom:calc(8px + var(--safe-b));translate:none}
+  #phonkBubble{right:12px;bottom:calc(12px + var(--safe-b))}
+}
+
+/* ---------- Small phones (<= 380px) ---------- */
+@media(max-width:380px){
+  main{padding:0 10px}
+  .intro h2{font-size:18px}
+  .header-actions button{padding:7px 10px;font-size:12px}
+  .editor-actions button{padding:8px 11px;font-size:12.5px}
+}
+
+/* ---------- Landscape phones: keep editor usable ---------- */
+@media(max-width:900px) and (max-height:480px) and (orientation:landscape){
+  header{position:static}
+  #code,.preview-box{height:70vh;min-height:200px}
+  .intro p{display:none}
+}
+
+/* ---------- Touch devices: no hover lift, bigger targets ---------- */
+@media(hover:none){
+  button:hover:not(:disabled){transform:none;box-shadow:none}
+  .qr-wrap:hover{transform:none}
+}
+
+/* terms dialog: readable, scrollable */
+#terms{max-height:86vh;max-height:86dvh;overflow:auto;overscroll-behavior:contain}
+#terms h3{font-size:14px;margin:18px 0 4px;color:var(--text)}
+#terms p{margin:0 0 6px}
+#terms .terms-meta{font-size:12px;color:var(--faint);margin:-6px 0 12px}
+#terms #closeTerms{margin-top:18px}
+
+/* feedback consent note */
+.fb-consent{margin:12px 0 0!important;font-size:11.5px!important;line-height:1.5!important;color:var(--faint)!important;text-align:center}
+#feedbackDlg .fb-kinds{flex-wrap:wrap;border-radius:18px;max-width:100%}
+@media(max-width:640px){#feedbackDlg .fb-kinds{width:100%}#feedbackDlg button.fb-chip{flex:1 1 auto;padding:8px 10px;font-size:12.5px}}

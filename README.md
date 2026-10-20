@@ -37,6 +37,6 @@ The editor colours code live as you type (VS Code Dark+ style). Language is set 
 
 ## Notes
 - Only the latest version of each workspace is stored; there is no edit history.
-- Anyone with a workspace link can edit while it is unlocked. The owner's Lock editing switch makes it read-only for everyone else. It is a permission lock, not encryption.
+- Anyone with a workspace link can edit while it is unlocked. The owner's Lock editing switch makes it read-only for everyone else. It is a permission lock. Stored workspace content is separately encrypted at rest.
 - Do not paste passwords, API keys, or other secrets into a shared workspace.
 - Edits are saved about half a second after typing stops, and pending edits are flushed when the server stops.
